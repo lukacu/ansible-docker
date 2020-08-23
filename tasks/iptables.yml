@@ -1,0 +1,57 @@
+---
+
+- name: Setup chain for managing docker binds
+  shell: iptables --new-chain DOCKER_BINDS -t mangle
+  # Don't fail
+  ignore_errors: yes
+
+- name: Flush docker
+  shell: iptables --new-chain DOCKER_BINDS -t mangle
+  # Don't fail
+  ignore_errors: yes
+
+firewall_binds_chain = state(
+    Iptables, 'flush',
+    'docker-containers-firewall-binds-flush',
+    chain='TOZD_DOCKER_BINDS',
+    table='mangle',
+    require=firewall_binds_chain,
+)
+
+firewall_binds_chain = state(
+    Iptables, 'insert',
+    'docker-containers-firewall-binds-attach',
+    table='mangle',
+    chain='PREROUTING',
+    position=1,
+    jump='TOZD_DOCKER_BINDS',
+    require=firewall_binds_chain,
+)
+
+# Setup ACCEPT/DROP rules in filter FORWARD table based on marks
+DOCKER_MARK_ACCEPT = 81000
+DOCKER_MARK_DROP = 81001
+
+firewall = state(
+    Iptables, 'insert',
+    'docker-containers-firewall-mark-accept',
+    table='filter',
+    chain='FORWARD',
+    position=1,
+    match='mark',
+    mark=DOCKER_MARK_ACCEPT,
+    jump='ACCEPT',
+    require=Pkg('iptables'),
+)
+
+firewall = state(
+    Iptables, 'insert',
+    'docker-containers-firewall-mark-drop',
+    table='filter',
+    chain='FORWARD',
+    position=1,
+    match='mark',
+    mark=DOCKER_MARK_DROP,
+    jump='DROP',
+    require=firewall,
+)

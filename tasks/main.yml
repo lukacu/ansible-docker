@@ -1,0 +1,71 @@
+---
+
+- name: Ensure old versions of Docker are not installed
+  package:
+    name:
+      - docker
+      - docker-engine
+    state: absent
+
+- name: Ensure dependencies are installed
+  apt:
+    name:
+      - apt-transport-https
+      - ca-certificates
+    state: present
+
+- name: Ensure pip dependency is installed (Python 2)
+  apt:
+    name:
+      - python-pip
+    state: present
+  when: ansible_python_version is version('3.0', operator='lt')
+
+- name: Ensure pip dependency is installed (Python 3)
+  apt:
+    name:
+      - python3-pip
+    state: present
+  when: ansible_python_version is version('3.0', operator='ge')
+
+
+- name: Add Docker apt key
+  apt_key:
+    url: https://download.docker.com/linux/ubuntu/gpg
+    id: 9DC858229FC7DD38854AE2D88D81803C0EBFCD88
+    state: present
+  register: add_repository_key
+
+- name: Add Docker repository
+  apt_repository:
+    repo: "deb [arch={{ architecture|lower }}] https://download.docker.com/linux/{{ ansible_distribution|lower }} {{ ansible_distribution_release }} {{ docker_apt_release_channel }}"
+    state: present
+    update_cache: true
+
+- name: Install Docker
+  package:
+    name: "{{ docker_package }}"
+    state: "{{ docker_package_state }}"
+  notify: restart docker
+
+- name: Ensure Docker is started and enabled at boot
+  service:
+    name: docker
+    state: "started"
+    enabled: "true"
+
+- name: Ensure handlers are notified now to avoid firewall conflicts
+  meta: flush_handlers
+
+- name: Ensure docker users are added to the docker group
+  user:
+    name: "{{ item }}"
+    groups: docker
+    append: true
+  with_items: "{{ docker_users }}"
+
+- name: Install Python module for docker API
+  pip:
+    name: docker
+    state: present
+
